@@ -5,6 +5,3 @@
 .idea/
 
 bin/*
-!bin/.gitkeep
-
-/test.db

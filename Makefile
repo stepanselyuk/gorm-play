@@ -23,7 +23,7 @@ stop:
 	docker-compose stop
 
 logs:
-	docker logs -f pm-service
+	docker logs -f gorm-play
 
 rebuild:
 	make build

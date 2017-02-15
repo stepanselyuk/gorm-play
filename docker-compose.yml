@@ -20,6 +20,7 @@ services:
       - db
 
   db:
+    container_name: gorm-db
     image: mysql:5.7
     ports:
       - 3308:3306

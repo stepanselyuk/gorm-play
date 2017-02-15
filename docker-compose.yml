@@ -38,3 +38,5 @@ services:
     depends_on:
       - db
     command: db:3306
+    environment:
+      SLEEP_LENGTH: 0.5

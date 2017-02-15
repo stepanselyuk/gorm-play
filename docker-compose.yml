@@ -9,8 +9,6 @@ services:
     image: pocketmedia/gobase
     volumes:
       - ./bin:/opt/service
-#    restart: always
-#    working_dir: /opt/service
     command: ""
     environment:
       ENV: docker

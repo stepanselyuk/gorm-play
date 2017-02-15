@@ -8,8 +8,9 @@ import (
 
 type Product struct {
 	gorm.Model
-	Code  string
-	Price uint
+	Code   string
+	Price  uint
+	Vendor string
 }
 
 func main() {
@@ -24,6 +25,8 @@ func main() {
 
 	// Migrate the schema
 	db.AutoMigrate(&Product{})
+
+	return
 
 	// Create
 	db.Create(&Product{Code: "L1200", Price: 1000})

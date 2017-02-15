@@ -9,7 +9,7 @@ services:
     image: pocketmedia/gobase
     volumes:
       - ./bin:/opt/service
-    restart: always
+#    restart: always
 #    working_dir: /go/src/gorm-play-app
     command: ""
     environment:

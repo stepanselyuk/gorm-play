@@ -17,7 +17,7 @@ services:
     links:
       - db
     depends_on:
-      - db
+      - start_dependencies
 
   db:
     container_name: gorm-db
@@ -32,3 +32,9 @@ services:
       MYSQL_DATABASE: gorm-play
       MYSQL_USER: gorm-play
       MYSQL_PASSWORD: 1234
+
+  start_dependencies:
+    image: dadarek/wait-for-dependencies
+    depends_on:
+      - db
+    command: db:3306

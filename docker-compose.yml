@@ -10,7 +10,7 @@ services:
     volumes:
       - ./bin:/opt/service
 #    restart: always
-#    working_dir: /go/src/gorm-play-app
+#    working_dir: /opt/service
     command: ""
     environment:
       ENV: docker

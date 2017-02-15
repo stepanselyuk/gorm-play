@@ -23,7 +23,7 @@ stop:
 	docker-compose stop
 
 logs:
-	docker logs -f gorm-play
+	docker logs -f gorm-playroom
 
 rebuild:
 	make build

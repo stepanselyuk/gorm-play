@@ -27,9 +27,14 @@ logs:
 
 rebuild:
 	make build
-	#remove old containers
+	# stop and remove old containers
 	docker-compose down
+	# build and start containers
 	docker-compose up -d
+
+clean:
+	#stop and remove old containers including volumes (mysql)
+	docker-compose down --volumes
 
 #npm install -g multi-file-swagger
 #generate:

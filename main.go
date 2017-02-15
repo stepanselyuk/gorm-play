@@ -14,7 +14,7 @@ type Product struct {
 
 func main() {
 
-	db, err := gorm.Open("mysql", "gorm-play:1234@tcp(gorm-db:3308)/gorm-play?charset=utf8&parseTime=True&loc=Local")
+	db, err := gorm.Open("mysql", "gorm-play:1234@tcp(gorm-db:3306)/gorm-play?charset=utf8&parseTime=True&loc=Local")
 
 	if err != nil {
 		panic(fmt.Sprint(err))

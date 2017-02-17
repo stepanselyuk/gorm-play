@@ -27,5 +27,5 @@ func GetProductMapping() {
 		panic(err)
 	}
 
-	log.Print(doc.Entities[0].Ids[0].Type.String())
+	log.Print(doc.Entities[0].Table.String())
 }

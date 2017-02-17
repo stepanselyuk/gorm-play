@@ -11,6 +11,7 @@ var xmlLoadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 
 		db_mappings.GetProductMapping()
+		db_mappings.AtomMapping()
 	},
 }
 

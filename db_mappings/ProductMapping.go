@@ -28,7 +28,8 @@ func GetProductMapping() {
 		panic(err)
 	}
 
-	v := doc.Entities[0].Fields[4].Options.Options[0].XsdGoPkgCDATA
+	//v := doc.Entities[0].Fields[4].Options.Options[0].XsdGoPkgCDATA
+	v := doc.Entities[0].Table
 
 	fmt.Printf("Product: %+v %p\n", v, v)
 }
@@ -56,7 +57,8 @@ func AtomMapping() {
 		panic(err)
 	}
 
-	v := doc.Ids[0].Lang
+	//v := doc.Ids[0].Lang
+	v := doc.Titles[0].XsdGoPkgCDATA
 
 	fmt.Printf("Atom: %+v %p\n", v, v)
 }

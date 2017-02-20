@@ -23,6 +23,7 @@ type TemplateParams struct {
 	Name            string
 	Fields          []*TemplateField
 	NeedTimePackage bool
+	TableName       string
 }
 
 var hasMany = make(map[string][]string)
@@ -80,6 +81,7 @@ func GenerateModel(table string, pkeys map[string]*FieldId, fields []*Field, tab
 		Name:            gormTableName(table),
 		Fields:          templateFields,
 		NeedTimePackage: needTimePackage,
+		TableName:       table,
 	}
 
 	return params

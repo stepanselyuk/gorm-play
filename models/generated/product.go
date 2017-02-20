@@ -12,7 +12,7 @@ type Product struct {
 	Vendor    string     `json:"vendor"`
 }
 
-// set User's table name to be `profiles`
+// set Product's table name to be `products`
 func (Product) TableName() string {
-	return "profiles"
+	return "products"
 }

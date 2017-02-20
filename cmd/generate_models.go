@@ -6,14 +6,14 @@ import (
 )
 
 // initializeCmd represents the migrate command
-var xmlLoadCmd = &cobra.Command{
-	Use: "xml_load",
+var generateModelsCmd = &cobra.Command{
+	Use: "generate-models",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		db_mappings.GetProductMapping()
+		db_mappings.GenerateGormModels()
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(xmlLoadCmd)
+	RootCmd.AddCommand(generateModelsCmd)
 }

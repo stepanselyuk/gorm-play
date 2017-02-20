@@ -11,5 +11,5 @@ type {{ .Name }} struct {
 
 // set User's table name to be `{{ .Name }}`
 func ({{ .Name }}) TableName() string {
-  return "profiles"
+  return "{{ .Name }}"
 }

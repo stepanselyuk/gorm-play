@@ -9,7 +9,7 @@ type {{ .Name }} struct {
 {{ end }}
 }
 
-// set User's table name to be `profiles`
+// set User's table name to be `{{ .Name }}`
 func ({{ .Name }}) TableName() string {
   return "profiles"
 }

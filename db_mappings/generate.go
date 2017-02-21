@@ -28,7 +28,8 @@ type TemplateParams struct {
 
 var hasMany = make(map[string][]string)
 
-func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields []*field, tables []string) *TemplateParams {
+func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields map[string]*field, belongsToList []*belongsTo) *TemplateParams {
+
 	var needTimePackage bool
 
 	templateFields := []*TemplateField{}
@@ -77,8 +78,27 @@ func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields 
 		}*/
 	}
 
+	for _, rel := range belongsToList {
+		templateFields = append(templateFields, &TemplateField{
+			Name:    rel.ModelName,
+			Type:    "*" + rel.ModelName,
+			Tag:     "gorm:\"ForeignKey:" + rel.ThisColumnName + ";AssociationForeignKey:" + rel.ReferencedColumnName + "\"",
+			Comment: "Belongs to \"" + rel.ModelName + "\" with relation " + rel.BelongsType + ".",
+		})
+
+		// adding holder field if it was not added before (id columns with association)
+		if _, ok := fields[rel.ThisColumnName]; !ok {
+			templateFields = append(templateFields, &TemplateField{
+				Name:    gormColumnName(rel.ThisColumnName),
+				Type:    gormDataType(&field{Type: rel.ReferencedColumnType}),
+				Tag:     genJSON(rel.ThisColumnName, "", nil),
+				Comment: "Value holder field for relation \"" + rel.ModelName + "\".",
+			})
+		}
+	}
+
 	params := &TemplateParams{
-		Name:            gormTableName(table),
+		Name:            name,
 		Fields:          templateFields,
 		NeedTimePackage: needTimePackage,
 		TableName:       table,

@@ -62,7 +62,7 @@ func generateModelForXmlFile(filePath string) {
 	//defer fmt.Printf("Table: %+v %p\n", v, v)
 
 	pkeys := map[string]*fieldId{}
-	fields := []*field{}
+	fields := map[string]*field{}
 
 	for _, id := range entity.Ids {
 
@@ -134,7 +134,7 @@ func generateModelForXmlFile(filePath string) {
 
 		fieldLength, _ := strconv.ParseUint(f.Length.String(), 10, 64)
 
-		fields = append(fields, &field{
+		fields[f.Column.String()] = &field{
 			Name:      f.Column.String(),
 			Type:      f.Type.String(),
 			Nullable:  f.Nullable.B(),
@@ -147,7 +147,7 @@ func generateModelForXmlFile(filePath string) {
 			Unsigned: optionUnsigned,
 			Fixed:    optionFixed,
 			Comment:  optionComment,
-		})
+		}
 	}
 
 	fmt.Println(pkeys)
@@ -157,11 +157,10 @@ func generateModelForXmlFile(filePath string) {
 	}
 
 	modelParams := &TemplateParams{}
-	tables := []string{}
 
 	entityName := entity.Name.String()[strings.LastIndex(entity.Name.String(), "\\")+1:]
 
-	modelParams = GenerateModel(entityName, entity.Table.String(), pkeys, fields, tables)
+	modelParams = GenerateModel(entityName, entity.Table.String(), pkeys, fields, getBelongsToList(entity))
 
 	outDir, _ := filepath.Abs("models/generated/")
 
@@ -193,6 +192,15 @@ func getIdByName(ids []*doctrine.Tid, name string) *doctrine.Tid {
 	}
 	return nil
 }
+
+//type columnInfo struct {
+//	Type   xsdt.Nmtoken
+//	Length xsdt.Nmtoken
+//}
+//
+//func getColumnInfoByName(entity *doctrine.Tentity, name string) columnInfo {
+//
+//}
 
 // see http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/tutorials/composite-primary-keys.html
 func fillAssociatedIdThroughRelations(rels []relation, id *doctrine.Tid) {
@@ -232,4 +240,66 @@ func fillAssociatedIdThroughRelations(rels []relation, id *doctrine.Tid) {
 
 		}
 	}
+}
+
+type belongsTo struct {
+	BelongsType          string
+	ModelName            string
+	ThisColumnName       string
+	ReferencedColumnName string
+	ReferencedColumnType string
+}
+
+func getBelongsToList(entity *doctrine.Tentity) []*belongsTo {
+
+	var list []*belongsTo
+
+	for _, rel := range entity.OneToOnes {
+		list = append(list, &belongsTo{
+			BelongsType:          "One-To-One",
+			ModelName:            rel.TargetEntity.String(),
+			ThisColumnName:       rel.JoinColumns.JoinColumns[0].Name.String(),
+			ReferencedColumnName: rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String(),
+			// FIXME it's heavy operation now and need to maintain a map with parsed xml documents per model name
+			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()),
+		})
+	}
+	for _, rel := range entity.ManyToOnes {
+		list = append(list, &belongsTo{
+			BelongsType:          "Many-To-One",
+			ModelName:            rel.TargetEntity.String(),
+			ThisColumnName:       rel.JoinColumns.JoinColumns[0].Name.String(),
+			ReferencedColumnName: rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String(),
+			// FIXME it's heavy operation now and need to maintain a map with parsed xml documents per model name
+			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()),
+		})
+	}
+
+	return list
+}
+
+func getReferencedColumnType(modelName string, columnName string) string {
+
+	relDoc := getDocForModelName(modelName)
+	entity := relDoc.Entities[0]
+
+	for _, id := range entity.Ids {
+
+		if id.AssociationKey.B() {
+			continue
+		}
+
+		if id.Column.String() == columnName {
+			return id.Type.String()
+		}
+	}
+
+	for _, f := range entity.Fields {
+
+		if f.Column.String() == columnName {
+			return f.Type.String()
+		}
+	}
+
+	return "string"
 }

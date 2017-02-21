@@ -17,6 +17,7 @@
     <field name="stateName" type="string" column="state_name" length="100" nullable="true">
       <options>
         <option name="fixed"/>
+        <option name="comment">This is test comment for the field</option>
       </options>
     </field>
     <field name="stateCode" type="string" column="state_code" length="20" nullable="true">

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping http://doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+  <entity name="AppBundle\Entity\GeonamesZip" table="geonames_zips">
+    <indexes>
+      <index name="geonames_zips_latitude_idx" columns="latitude"/>
+      <index name="geonames_zips_longitude_idx" columns="longitude"/>
+      <index name="geonames_zips_state_id_idx" columns="state_id"/>
+      <index name="geonames_zips_place_name_idx" columns="place_name"/>
+      <index name="geonames_zips_city_id_idx" columns="city_id"/>
+      <index name="geonames_zips_state_name_idx" columns="state_name"/>
+      <index name="geonames_zips_province_name_idx" columns="province_name"/>
+      <index name="geonames_zips_country_id_idx" columns="country_id"/>
+    </indexes>
+    <id name="postalCode" type="string" column="postal_code" length="20"/>
+    <id name="placeName" type="string" column="place_name" length="180"/>
+    <id name="country" association-key="true"/>
+    <field name="stateName" type="string" column="state_name" length="100" nullable="true">
+      <options>
+        <option name="fixed"/>
+      </options>
+    </field>
+    <field name="stateCode" type="string" column="state_code" length="20" nullable="true">
+      <options>
+        <option name="fixed"/>
+      </options>
+    </field>
+    <field name="provinceName" type="string" column="province_name" length="100" nullable="true">
+      <options>
+        <option name="fixed"/>
+      </options>
+    </field>
+    <field name="provinceCode" type="string" column="province_code" length="20" nullable="true">
+      <options>
+        <option name="fixed"/>
+      </options>
+    </field>
+    <field name="latitude" type="float" column="latitude" precision="10" scale="0" nullable="true"/>
+    <field name="longitude" type="float" column="longitude" precision="10" scale="0" nullable="true"/>
+    <field name="accuracy" type="decimal" column="accuracy" precision="1" scale="0" nullable="true"/>
+    <one-to-one field="country" target-entity="GeonamesCountry" fetch="LAZY">
+      <join-columns>
+        <join-column name="country_id" referenced-column-name="id"/>
+      </join-columns>
+    </one-to-one>
+    <many-to-one field="state" target-entity="GeonamesState" fetch="LAZY">
+      <join-columns>
+        <join-column name="state_id" referenced-column-name="id"/>
+      </join-columns>
+    </many-to-one>
+    <many-to-one field="city" target-entity="GeonamesCity" fetch="LAZY">
+      <join-columns>
+        <join-column name="city_id" referenced-column-name="id"/>
+      </join-columns>
+    </many-to-one>
+  </entity>
+</doctrine-mapping>

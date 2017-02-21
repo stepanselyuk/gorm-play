@@ -30,13 +30,19 @@ type FieldId struct {
 	GeneratorStrategy string
 }
 
+// get absolute path of directory with xml files
+func getXmlFilesDirPath() string {
+	dir, _ := filepath.Abs("db_mappings/xml/")
+	return dir
+}
+
 func GenerateGormModels() {
 
-	dir, _ := filepath.Abs("db_mappings/xml/")
+	dir := getXmlFilesDirPath()
 
 	ufs.WalkFilesIn(dir, func(fullPath string) (keepWalking bool) {
 		keepWalking = true
-		if strings.HasSuffix(fullPath, ".xml") {
+		if strings.HasSuffix(fullPath, ".orm.xml") {
 			generateModelForXml(fullPath)
 		}
 		return
@@ -48,7 +54,7 @@ type DoctrineMapping struct {
 	doctrine.TxsdDoctrineMapping
 }
 
-func generateModelForXml(filePath string) {
+func getDocForFilePath(filePath string) *DoctrineMapping {
 
 	doc, dataOrig := &DoctrineMapping{}, ufs.ReadBinaryFile(filePath, true)
 	err := xml.Unmarshal(dataOrig, doc)
@@ -57,20 +63,58 @@ func generateModelForXml(filePath string) {
 		panic(err)
 	}
 
-	entity := doc.Entities[0]
+	return doc
+}
 
-	v := entity.Table
+func getDocForModelName(modelName string) *DoctrineMapping {
+	dir := getXmlFilesDirPath()
+	filePath := dir + "/" + modelName + ".orm.xml"
+	return getDocForFilePath(filePath)
+}
+
+func generateModelForXml(filePath string) {
+
+	entity := getDocForFilePath(filePath).Entities[0]
+
+	//v := entity.Table
 	defer fmt.Println(filePath)
-	defer fmt.Printf("Table: %+v %p\n", v, v)
+	//defer fmt.Printf("Table: %+v %p\n", v, v)
 
 	pkeys := map[string]*FieldId{}
 	fields := []*Field{}
 
 	for _, id := range entity.Ids {
 
-		pkeys[id.Column.String()] = &FieldId{
-			GeneratorStrategy: id.Generator.Strategy.String(),
+		var pkey *FieldId
+
+		if id.AssociationKey.B() {
+
+			relations := []relation{}
+			for _, v := range entity.OneToOnes {
+				relations = append(relations, one2one{v})
+			}
+			for _, v := range entity.ManyToOnes {
+				relations = append(relations, many2one{v})
+			}
+
+			// try to find in one2one relations
+			fillAssociatedIdThroughRelations(relations, id)
+
+			// case of we cannot fill data
+			if id.Column.String() == "" {
+				continue
+			}
 		}
+
+		pkey = &FieldId{
+			GeneratorStrategy: "NONE",
+		}
+
+		if id.Generator != nil {
+			pkey.GeneratorStrategy = id.Generator.Strategy.String()
+		}
+
+		pkeys[id.Column.String()] = pkey
 
 		field := &doctrine.Tfield{}
 
@@ -131,22 +175,80 @@ func generateModelForXml(filePath string) {
 		fmt.Println(f1.Name)
 	}
 
-	modelParams := map[string]*TemplateParams{}
+	modelParams := &TemplateParams{}
 	tables := []string{}
 
-	modelParams[entity.Table.String()] = GenerateModel(entity.Table.String(), pkeys, fields, tables)
+	entityName := entity.Name.String()[strings.LastIndex(entity.Name.String(), "\\")+1:]
+
+	modelParams = GenerateModel(entityName, entity.Table.String(), pkeys, fields, tables)
 
 	outDir, _ := filepath.Abs("models/generated/")
 
-	for table, param := range modelParams {
+	//fmt.Println("Add relation for Table name: " + table)
+	//AddHasMany(param)
 
-		fmt.Println("Add relation for Table name: " + table)
+	if err := SaveModel(entity.Table.String(), modelParams, outDir); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
 
-		AddHasMany(param)
+// get field by its name from specified slice with fields
+func getFieldByName(fields []*doctrine.Tfield, name string) *doctrine.Tfield {
+	for _, field := range fields {
+		if field.Column.String() == name {
+			return field
+		}
+	}
+	return nil
+}
 
-		if err := SaveModel(table, param, outDir); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+// get ID-node by its name from specified slice with IDs
+func getIdByName(ids []*doctrine.Tid, name string) *doctrine.Tid {
+	for _, id := range ids {
+		if id.Column.String() == name {
+			return id
+		}
+	}
+	return nil
+}
+
+// see http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/tutorials/composite-primary-keys.html
+func fillAssociatedIdThroughRelations(rels []relation, id *doctrine.Tid) {
+
+	if rels == nil {
+		return
+	}
+
+	for _, rel := range rels {
+
+		if rel.GetField().String() == id.Name.String() && rel.GetJoinColumns() != nil && rel.GetJoinColumns().JoinColumns != nil {
+
+			joinColumn := rel.GetJoinColumns().JoinColumns[0]
+			id.Column.Set(joinColumn.Name.String())
+
+			// loading doc of related model to get type of id-column, cause both should have
+			// the same type to be linked
+			relDoc := getDocForModelName(rel.GetTargetEntity().String())
+
+			relId := getIdByName(relDoc.Entities[0].Ids, joinColumn.ReferencedColumnName.String())
+			if relId != nil {
+
+				id.Type.Set(relId.Type.String())
+				id.Length.Set(relId.Length.String())
+
+			} else {
+
+				relField := getFieldByName(relDoc.Entities[0].Fields, joinColumn.ReferencedColumnName.String())
+
+				if relField == nil {
+					panic(fmt.Sprintf("Cannot find neither related ID or normal field for column '%s' in linked document of model '%s'", id.Name.String(), rel.GetTargetEntity().String()))
+				}
+
+				id.Type.Set(relField.Type.String())
+				id.Length.Set(relField.Length.String())
+			}
+
 		}
 	}
 }

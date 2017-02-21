@@ -28,7 +28,7 @@ type TemplateParams struct {
 
 var hasMany = make(map[string][]string)
 
-func GenerateModel(table string, pkeys map[string]*FieldId, fields []*Field, tables []string) *TemplateParams {
+func GenerateModel(name string, table string, pkeys map[string]*FieldId, fields []*Field, tables []string) *TemplateParams {
 	var needTimePackage bool
 
 	templateFields := []*TemplateField{}
@@ -59,7 +59,7 @@ func GenerateModel(table string, pkeys map[string]*FieldId, fields []*Field, tab
 			Comment: field.Comment,
 		})
 
-		isInfered, infColName := inferORM(field.Name, tables)
+		/*isInfered, infColName := inferORM(field.Name, tables)
 
 		colName := gormColumnName(infColName)
 
@@ -74,7 +74,7 @@ func GenerateModel(table string, pkeys map[string]*FieldId, fields []*Field, tab
 
 			// Add has_many relation
 			hasMany[colName] = append(hasMany[colName], table)
-		}
+		}*/
 	}
 
 	params := &TemplateParams{
@@ -177,8 +177,16 @@ func genJSON(columnName, columnDefault string, primaryKeys map[string]*FieldId) 
 
 	// FIXME can be other strategies
 	// see http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/reference/basic-mapping.html#identifier-generation-strategies
-	if _, ok := primaryKeys[columnName]; ok {
-		p := "gorm:\"primary_key;AUTO_INCREMENT\" "
+	if pk, ok := primaryKeys[columnName]; ok {
+
+		var p string
+
+		if pk.GeneratorStrategy == "IDENTITY" {
+			p = "gorm:\"primary_key;AUTO_INCREMENT\" "
+		} else {
+			p = "gorm:\"primary_key\" "
+		}
+
 		json = p + json
 	}
 

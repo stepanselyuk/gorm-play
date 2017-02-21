@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping http://doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+  <entity name="AppBundle\Entity\GeonamesState" table="geonames_states">
+    <indexes>
+      <index name="geonames_states_code_idx" columns="code"/>
+      <index name="geonames_states_country_id_idx" columns="country_id"/>
+      <index name="geonames_states_name_idx" columns="name"/>
+      <index name="geonames_states_asciiname_idx" columns="asciiname"/>
+    </indexes>
+    <id name="id" type="integer" column="id">
+      <generator strategy="NONE"/>
+    </id>
+    <field name="name" type="string" column="name" length="200" nullable="false">
+      <options>
+        <option name="fixed"/>
+        <option name="default"/>
+      </options>
+    </field>
+    <field name="asciiname" type="string" column="asciiname" length="200" nullable="false">
+      <options>
+        <option name="fixed"/>
+        <option name="default"/>
+      </options>
+    </field>
+    <field name="code" type="string" column="code" length="50" nullable="false">
+      <options>
+        <option name="fixed"/>
+        <option name="default"/>
+      </options>
+    </field>
+    <many-to-one field="country" target-entity="GeonamesCountry" fetch="LAZY">
+      <join-columns>
+        <join-column name="country_id" referenced-column-name="id"/>
+      </join-columns>
+    </many-to-one>
+  </entity>
+</doctrine-mapping>

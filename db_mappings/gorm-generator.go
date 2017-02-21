@@ -11,25 +11,6 @@ import (
 	"strings"
 )
 
-type Field struct {
-	Name      string
-	Type      string
-	Nullable  bool
-	Unique    bool
-	Length    uint64
-	Scale     int64
-	Precision int64
-	// options
-	Default  string
-	Unsigned bool
-	Fixed    bool
-	Comment  string
-}
-
-type FieldId struct {
-	GeneratorStrategy string
-}
-
 // get absolute path of directory with xml files
 func getXmlFilesDirPath() string {
 	dir, _ := filepath.Abs("db_mappings/xml/")
@@ -43,7 +24,7 @@ func GenerateGormModels() {
 	ufs.WalkFilesIn(dir, func(fullPath string) (keepWalking bool) {
 		keepWalking = true
 		if strings.HasSuffix(fullPath, ".orm.xml") {
-			generateModelForXml(fullPath)
+			generateModelForXmlFile(fullPath)
 		}
 		return
 	})
@@ -72,7 +53,7 @@ func getDocForModelName(modelName string) *DoctrineMapping {
 	return getDocForFilePath(filePath)
 }
 
-func generateModelForXml(filePath string) {
+func generateModelForXmlFile(filePath string) {
 
 	entity := getDocForFilePath(filePath).Entities[0]
 
@@ -80,12 +61,12 @@ func generateModelForXml(filePath string) {
 	defer fmt.Println(filePath)
 	//defer fmt.Printf("Table: %+v %p\n", v, v)
 
-	pkeys := map[string]*FieldId{}
-	fields := []*Field{}
+	pkeys := map[string]*fieldId{}
+	fields := []*field{}
 
 	for _, id := range entity.Ids {
 
-		var pkey *FieldId
+		var pkey *fieldId
 
 		if id.AssociationKey.B() {
 
@@ -106,7 +87,7 @@ func generateModelForXml(filePath string) {
 			}
 		}
 
-		pkey = &FieldId{
+		pkey = &fieldId{
 			GeneratorStrategy: "NONE",
 		}
 
@@ -116,17 +97,17 @@ func generateModelForXml(filePath string) {
 
 		pkeys[id.Column.String()] = pkey
 
-		field := &doctrine.Tfield{}
+		fieldVar := &doctrine.Tfield{}
 
-		field.Name.Set(id.Name.String())
-		field.Column.Set(id.Column.String())
-		field.Type.Set(id.Type.String())
-		field.Length.Set(id.Length.String())
-		field.Options = id.Options
+		fieldVar.Name.Set(id.Name.String())
+		fieldVar.Column.Set(id.Column.String())
+		fieldVar.Type.Set(id.Type.String())
+		fieldVar.Length.Set(id.Length.String())
+		fieldVar.Options = id.Options
 
-		//fmt.Printf("Id field: %+v %p\n", field, field)
+		//fmt.Printf("Id field: %+v %p\n", fieldVar, fieldVar)
 
-		entity.Fields = append([]*doctrine.Tfield{field}, entity.Fields...)
+		entity.Fields = append([]*doctrine.Tfield{fieldVar}, entity.Fields...)
 	}
 
 	for _, f := range entity.Fields {
@@ -153,7 +134,7 @@ func generateModelForXml(filePath string) {
 
 		fieldLength, _ := strconv.ParseUint(f.Length.String(), 10, 64)
 
-		fields = append(fields, &Field{
+		fields = append(fields, &field{
 			Name:      f.Column.String(),
 			Type:      f.Type.String(),
 			Nullable:  f.Nullable.B(),

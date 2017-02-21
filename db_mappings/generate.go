@@ -28,7 +28,7 @@ type TemplateParams struct {
 
 var hasMany = make(map[string][]string)
 
-func GenerateModel(name string, table string, pkeys map[string]*FieldId, fields []*Field, tables []string) *TemplateParams {
+func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields []*field, tables []string) *TemplateParams {
 	var needTimePackage bool
 
 	templateFields := []*TemplateField{}
@@ -172,7 +172,7 @@ func inferORM(s string, tables []string) (bool, string) {
 }
 
 // Generate json
-func genJSON(columnName, columnDefault string, primaryKeys map[string]*FieldId) (json string) {
+func genJSON(columnName, columnDefault string, primaryKeys map[string]*fieldId) (json string) {
 	json = "json:\"" + columnName + "\""
 
 	// FIXME can be other strategies
@@ -226,7 +226,7 @@ func gormColumnName(s string) string {
 }
 
 // See http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/reference/basic-mapping.html#doctrine-mapping-types
-func gormDataType(f *Field) string {
+func gormDataType(f *field) string {
 	switch {
 
 	case f.Type == "string" || f.Type == "text" || f.Type == "decimal" || f.Type == "guid":

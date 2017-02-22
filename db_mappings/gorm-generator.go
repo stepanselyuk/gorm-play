@@ -2,14 +2,60 @@ package db_mappings
 
 import (
 	"encoding/xml"
-	"fmt"
 	ufs "github.com/metaleap/go-util-fs"
 	doctrine "github.com/stepanselyuk/doctrine-mappings-xsd-go/doctrine-project.org/schemas/orm/doctrine-mapping.xsd_go"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
+
+// model name -> data name -> some value
+var data map[string]*modelDetails
+var logger *log.Logger
+
+type modelDetails struct {
+	entity       *doctrine.Tentity
+	primaryKeys  map[string]*fieldId
+	normalFields map[string]*field
+	relations    map[string]*modelRelation
+}
+
+// initialize struct
+func (d *modelDetails) init() {
+
+	d.primaryKeys = make(map[string]*fieldId)
+	d.normalFields = make(map[string]*field)
+	d.relations = make(map[string]*modelRelation)
+}
+
+// get table name of entity
+func (d *modelDetails) getTableName() string {
+	return d.entity.Table.String()
+}
+
+// get simple name of entity
+func (d *modelDetails) getModelSimpleName() string {
+	return getEntitySimpleName(d.entity)
+}
+
+// init data map
+func initDataMap() {
+	if data == nil {
+		data = make(map[string]*modelDetails)
+	}
+}
+
+// init logger
+func initLogger() {
+
+	if logger == nil {
+		flag := log.LstdFlags | log.Lmicroseconds | log.Lshortfile
+		logger = log.New(os.Stdout, "", flag)
+		logger.Println("Logger has been set")
+	}
+}
 
 // get absolute path of directory with xml files
 func getXmlFilesDirPath() string {
@@ -17,24 +63,36 @@ func getXmlFilesDirPath() string {
 	return dir
 }
 
-func GenerateGormModels() {
+func loadParseAllXmlModels() {
 
 	dir := getXmlFilesDirPath()
 
 	ufs.WalkFilesIn(dir, func(fullPath string) (keepWalking bool) {
 		keepWalking = true
 		if strings.HasSuffix(fullPath, ".orm.xml") {
-			generateModelForXmlFile(fullPath)
+
+			entity := getDocForFilePath(fullPath).Entities[0]
+			entityName := getEntitySimpleName(entity)
+
+			data[entityName] = &modelDetails{
+				entity: entity,
+			}
+
+			// initialize internal fields
+			data[entityName].init()
+
+			logger.Println("Loaded file " + fullPath)
 		}
 		return
 	})
 }
 
-type DoctrineMapping struct {
-	XMLName xml.Name `xml:"doctrine-mapping"`
-	doctrine.TxsdDoctrineMapping
+// get simple name for entity: AppBundle\Entity\ModelName -> ModelName
+func getEntitySimpleName(entity *doctrine.Tentity) string {
+	return entity.Name.String()[strings.LastIndex(entity.Name.String(), "\\")+1:]
 }
 
+// load and parse xml for specified filepath
 func getDocForFilePath(filePath string) *DoctrineMapping {
 
 	doc, dataOrig := &DoctrineMapping{}, ufs.ReadBinaryFile(filePath, true)
@@ -47,55 +105,93 @@ func getDocForFilePath(filePath string) *DoctrineMapping {
 	return doc
 }
 
+// load and parse xml for specified model name
 func getDocForModelName(modelName string) *DoctrineMapping {
+
 	dir := getXmlFilesDirPath()
 	filePath := dir + "/" + modelName + ".orm.xml"
+
 	return getDocForFilePath(filePath)
 }
 
-func generateModelForXmlFile(filePath string) {
+func GenerateGormModels() {
 
-	entity := getDocForFilePath(filePath).Entities[0]
+	initLogger()
+	initDataMap()
+	loadParseAllXmlModels()
 
-	//v := entity.Table
-	defer fmt.Println(filePath)
-	//defer fmt.Printf("Table: %+v %p\n", v, v)
+	// handle all models before saving, cause we can affect each other
+	for _, modelDetails := range data {
+		processModelDetails(modelDetails)
+	}
 
-	pkeys := map[string]*fieldId{}
-	fields := map[string]*field{}
+	// save models to files
+	for _, modelDetails := range data {
+		templateParams := generateModelForEntity(modelDetails)
+		if err := SaveModel(templateParams.Name, templateParams, getOutputDirPath()); err != nil {
+			logger.Fatal(err)
+		}
+	}
+}
 
-	for _, id := range entity.Ids {
+// ------------------------------------------------------
+// ------------------------------------------------------
 
-		var pkey *fieldId
+type DoctrineMapping struct {
+	XMLName xml.Name `xml:"doctrine-mapping"`
+	doctrine.TxsdDoctrineMapping
+}
+
+// get absolute path of directory with xml files
+func getOutputDirPath() string {
+	dir, _ := filepath.Abs("models/generated/")
+	return dir
+}
+
+func processModelDetails(modelDetails *modelDetails) {
+
+	handlePrimaryKeys(modelDetails)
+	handleNormalFields(modelDetails)
+	handleRelations(modelDetails)
+}
+
+func generateModelForEntity(modelDetails *modelDetails) *TemplateParams {
+	return GenerateModel(modelDetails)
+}
+
+func handlePrimaryKeys(modelDetails *modelDetails) {
+
+	for _, id := range modelDetails.entity.Ids {
 
 		if id.AssociationKey.B() {
 
 			relations := []relation{}
-			for _, v := range entity.OneToOnes {
+			for _, v := range modelDetails.entity.OneToOnes {
 				relations = append(relations, one2one{v})
 			}
-			for _, v := range entity.ManyToOnes {
+			for _, v := range modelDetails.entity.ManyToOnes {
 				relations = append(relations, many2one{v})
 			}
 
 			// try to find in one2one relations
-			fillAssociatedIdThroughRelations(relations, id)
+			fillAssociatedPrimaryKeyThroughDefinedRelations(relations, id)
 
 			// case of we cannot fill data
 			if id.Column.String() == "" {
+				logger.Printf("Cannot fill details for primary key '%s' of model '%s'.\n", id.Column.String(), modelDetails.getModelSimpleName())
 				continue
 			}
 		}
 
-		pkey = &fieldId{
+		modelDetails.primaryKeys[id.Column.String()] = &fieldId{
 			GeneratorStrategy: "NONE",
 		}
 
 		if id.Generator != nil {
-			pkey.GeneratorStrategy = id.Generator.Strategy.String()
+			modelDetails.primaryKeys[id.Column.String()].GeneratorStrategy = id.Generator.Strategy.String()
 		}
 
-		pkeys[id.Column.String()] = pkey
+		// creating new field from primary key
 
 		fieldVar := &doctrine.Tfield{}
 
@@ -107,10 +203,49 @@ func generateModelForXmlFile(filePath string) {
 
 		//fmt.Printf("Id field: %+v %p\n", fieldVar, fieldVar)
 
-		entity.Fields = append([]*doctrine.Tfield{fieldVar}, entity.Fields...)
+		// FIXME maybe need to find other way to not spoil in entity data
+		modelDetails.entity.Fields = append([]*doctrine.Tfield{fieldVar}, modelDetails.entity.Fields...)
+	}
+}
+
+// see http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/tutorials/composite-primary-keys.html
+func fillAssociatedPrimaryKeyThroughDefinedRelations(rels []relation, id *doctrine.Tid) {
+
+	if rels == nil {
+		return
 	}
 
-	for _, f := range entity.Fields {
+	for _, rel := range rels {
+
+		if rel.GetField().String() == id.Name.String() && rel.GetJoinColumns() != nil && rel.GetJoinColumns().JoinColumns != nil {
+
+			joinColumn := rel.GetJoinColumns().JoinColumns[0]
+			id.Column.Set(joinColumn.Name.String())
+
+			// loading doc of related model to get type of id-column, cause both should have the same type to be linked
+			relEntity := data[rel.GetTargetEntity().String()].entity
+
+			if relId := getIdByName(relEntity.Ids, joinColumn.ReferencedColumnName.String()); relId != nil {
+
+				id.Type.Set(relId.Type.String())
+				id.Length.Set(relId.Length.String())
+
+			} else if relField := getFieldByName(relEntity.Fields, joinColumn.ReferencedColumnName.String()); relField != nil {
+
+				id.Type.Set(relField.Type.String())
+				id.Length.Set(relField.Length.String())
+
+			} else {
+				logger.Panicf("Cannot find neither related primary key or normal field for column '%s' in linked document of model '%s'.\n", id.Name.String(), rel.GetTargetEntity().String())
+			}
+
+		}
+	}
+}
+
+func handleNormalFields(modelDetails *modelDetails) {
+
+	for _, f := range modelDetails.entity.Fields {
 
 		optionDefaultValue := ""
 		optionUnsigned := false
@@ -134,42 +269,25 @@ func generateModelForXmlFile(filePath string) {
 
 		fieldLength, _ := strconv.ParseUint(f.Length.String(), 10, 64)
 
-		fields[f.Column.String()] = &field{
-			Name:      f.Column.String(),
-			Type:      f.Type.String(),
-			Nullable:  f.Nullable.B(),
-			Unique:    f.Unique.B(),
-			Length:    fieldLength,
-			Scale:     f.Scale.N(),
+		modelDetails.normalFields[f.Column.String()] = &field{
+			Name:     f.Column.String(),
+			Type:     f.Type.String(),
+			Nullable: f.Nullable.B(),
+			Unique:   f.Unique.B(),
+			// only for "string"
+			Length: fieldLength,
+			// only for "decimal"
+			Scale: f.Scale.N(),
+			// only for "decimal"
 			Precision: f.Precision.N(),
+			// --------------------------
 			// options
 			Default:  optionDefaultValue,
 			Unsigned: optionUnsigned,
-			Fixed:    optionFixed,
-			Comment:  optionComment,
+			// for "string"
+			Fixed:   optionFixed,
+			Comment: optionComment,
 		}
-	}
-
-	fmt.Println(pkeys)
-
-	for _, f1 := range fields {
-		fmt.Println(f1.Name)
-	}
-
-	modelParams := &TemplateParams{}
-
-	entityName := entity.Name.String()[strings.LastIndex(entity.Name.String(), "\\")+1:]
-
-	modelParams = GenerateModel(entityName, entity.Table.String(), pkeys, fields, getBelongsToList(entity))
-
-	outDir, _ := filepath.Abs("models/generated/")
-
-	//fmt.Println("Add relation for Table name: " + table)
-	//AddHasMany(param)
-
-	if err := SaveModel(entity.Table.String(), modelParams, outDir); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 }
 
@@ -193,95 +311,85 @@ func getIdByName(ids []*doctrine.Tid, name string) *doctrine.Tid {
 	return nil
 }
 
-//type columnInfo struct {
-//	Type   xsdt.Nmtoken
-//	Length xsdt.Nmtoken
-//}
-//
-//func getColumnInfoByName(entity *doctrine.Tentity, name string) columnInfo {
-//
-//}
-
-// see http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/tutorials/composite-primary-keys.html
-func fillAssociatedIdThroughRelations(rels []relation, id *doctrine.Tid) {
-
-	if rels == nil {
-		return
-	}
-
-	for _, rel := range rels {
-
-		if rel.GetField().String() == id.Name.String() && rel.GetJoinColumns() != nil && rel.GetJoinColumns().JoinColumns != nil {
-
-			joinColumn := rel.GetJoinColumns().JoinColumns[0]
-			id.Column.Set(joinColumn.Name.String())
-
-			// loading doc of related model to get type of id-column, cause both should have
-			// the same type to be linked
-			relDoc := getDocForModelName(rel.GetTargetEntity().String())
-
-			relId := getIdByName(relDoc.Entities[0].Ids, joinColumn.ReferencedColumnName.String())
-			if relId != nil {
-
-				id.Type.Set(relId.Type.String())
-				id.Length.Set(relId.Length.String())
-
-			} else {
-
-				relField := getFieldByName(relDoc.Entities[0].Fields, joinColumn.ReferencedColumnName.String())
-
-				if relField == nil {
-					panic(fmt.Sprintf("Cannot find neither related ID or normal field for column '%s' in linked document of model '%s'", id.Name.String(), rel.GetTargetEntity().String()))
-				}
-
-				id.Type.Set(relField.Type.String())
-				id.Length.Set(relField.Length.String())
-			}
-
-		}
-	}
-}
-
-type belongsTo struct {
-	BelongsType          string
+type modelRelation struct {
+	Type                 string
+	TypeDescription      string
 	ModelName            string
 	ThisColumnName       string
 	ReferencedColumnName string
 	ReferencedColumnType string
 }
 
-func getBelongsToList(entity *doctrine.Tentity) []*belongsTo {
+func handleRelations(modelDetails *modelDetails) {
 
-	var list []*belongsTo
+	for _, rel := range modelDetails.entity.OneToOnes {
 
-	for _, rel := range entity.OneToOnes {
-		list = append(list, &belongsTo{
-			BelongsType:          "One-To-One",
+		thisColumnName := rel.JoinColumns.JoinColumns[0].Name.String()
+		referencedColumnName := rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()
+
+		modelDetails.relations[thisColumnName+":"+rel.TargetEntity.String()] = &modelRelation{
+			Type:                 "BelongsTo",
+			TypeDescription:      "One({x})-To-One({y})",
 			ModelName:            rel.TargetEntity.String(),
-			ThisColumnName:       rel.JoinColumns.JoinColumns[0].Name.String(),
-			ReferencedColumnName: rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String(),
-			// FIXME it's heavy operation now and need to maintain a map with parsed xml documents per model name
-			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()),
-		})
-	}
-	for _, rel := range entity.ManyToOnes {
-		list = append(list, &belongsTo{
-			BelongsType:          "Many-To-One",
-			ModelName:            rel.TargetEntity.String(),
-			ThisColumnName:       rel.JoinColumns.JoinColumns[0].Name.String(),
-			ReferencedColumnName: rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String(),
-			// FIXME it's heavy operation now and need to maintain a map with parsed xml documents per model name
-			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()),
-		})
+			ThisColumnName:       thisColumnName,
+			ReferencedColumnName: referencedColumnName,
+			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), referencedColumnName),
+		}
+
+		// we can infer as opposite has-one relation from belongs-to/one-to-one relation
+		modelDetailsTarget := data[rel.TargetEntity.String()]
+
+		// many models get refer to the same column on target entity so we are using complex key
+		if _, ok := modelDetailsTarget.relations[referencedColumnName+":"+modelDetails.getModelSimpleName()]; !ok {
+
+			modelDetailsTarget.relations[referencedColumnName+":"+modelDetails.getModelSimpleName()] = &modelRelation{
+				Type:                 "HasOne",
+				TypeDescription:      "One({x})-Has-One({y})",
+				ModelName:            modelDetails.getModelSimpleName(),
+				ThisColumnName:       referencedColumnName,
+				ReferencedColumnName: thisColumnName,
+				ReferencedColumnType: getReferencedColumnType(modelDetails.getModelSimpleName(), thisColumnName),
+			}
+		}
 	}
 
-	return list
+	for _, rel := range modelDetails.entity.ManyToOnes {
+
+		thisColumnName := rel.JoinColumns.JoinColumns[0].Name.String()
+		referencedColumnName := rel.JoinColumns.JoinColumns[0].ReferencedColumnName.String()
+
+		modelDetails.relations[thisColumnName+":"+rel.TargetEntity.String()] = &modelRelation{
+			Type:                 "BelongsTo",
+			TypeDescription:      "Many({x})-To-One({y})",
+			ModelName:            rel.TargetEntity.String(),
+			ThisColumnName:       thisColumnName,
+			ReferencedColumnName: referencedColumnName,
+			ReferencedColumnType: getReferencedColumnType(rel.TargetEntity.String(), referencedColumnName),
+		}
+
+		// we can infer as opposite has-many relation from belongs-to/many-to-one relation
+		modelDetailsTarget := data[rel.TargetEntity.String()]
+
+		// many models get refer to the same column on target entity so we are using complex key
+		if _, ok := modelDetailsTarget.relations[referencedColumnName+":"+modelDetails.getModelSimpleName()]; !ok {
+
+			modelDetailsTarget.relations[referencedColumnName+":"+modelDetails.getModelSimpleName()] = &modelRelation{
+				Type:                 "HasMany",
+				TypeDescription:      "One({x})-Has-Many({y})",
+				ModelName:            modelDetails.getModelSimpleName(),
+				ThisColumnName:       referencedColumnName,
+				ReferencedColumnName: thisColumnName,
+				ReferencedColumnType: getReferencedColumnType(modelDetails.getModelSimpleName(), thisColumnName),
+			}
+		}
+	}
+
+	// FIXME need to implement many-to-many relation
 }
 
 func getReferencedColumnType(modelName string, columnName string) string {
 
-	relDoc := getDocForModelName(modelName)
-	entity := relDoc.Entities[0]
+	entity := data[modelName].entity
 
 	for _, id := range entity.Ids {
 

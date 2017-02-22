@@ -38,11 +38,11 @@
     <field name="latitude" type="float" column="latitude" precision="10" scale="0" nullable="true"/>
     <field name="longitude" type="float" column="longitude" precision="10" scale="0" nullable="true"/>
     <field name="accuracy" type="decimal" column="accuracy" precision="1" scale="0" nullable="true"/>
-    <one-to-one field="country" target-entity="GeonamesCountry" fetch="LAZY">
+    <many-to-one field="country" target-entity="GeonamesCountry" fetch="LAZY">
       <join-columns>
         <join-column name="country_id" referenced-column-name="id"/>
       </join-columns>
-    </one-to-one>
+    </many-to-one>
     <many-to-one field="state" target-entity="GeonamesState" fetch="LAZY">
       <join-columns>
         <join-column name="state_id" referenced-column-name="id"/>

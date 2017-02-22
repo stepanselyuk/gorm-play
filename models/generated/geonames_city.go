@@ -1,17 +1,18 @@
-package models
+package models_generated
 
 type GeonamesCity struct {
+	FeatureCode     string           `json:"feature_code"`
+	Population      int64            `json:"population"`
 	ID              int              `gorm:"primary_key" json:"id"`
 	Name            string           `json:"name"`
 	Asciiname       string           `json:"asciiname"`
 	Latitude        float64          `json:"latitude"`
 	Longitude       float64          `json:"longitude"`
-	FeatureCode     string           `json:"feature_code"`
-	Population      int64            `json:"population"`
-	GeonamesState   *GeonamesState   `gorm:"ForeignKey:state_id;AssociationForeignKey:id"`   // Belongs to "GeonamesState" with relation Many-To-One.
-	StateID         int              `json:"state_id"`                                       // Value holder field for relation "GeonamesState".
-	GeonamesCountry *GeonamesCountry `gorm:"ForeignKey:country_id;AssociationForeignKey:id"` // Belongs to "GeonamesCountry" with relation Many-To-One.
-	CountryID       int              `json:"country_id"`                                     // Value holder field for relation "GeonamesCountry".
+	GeonamesCountry *GeonamesCountry `gorm:"ForeignKey:country_id;AssociationForeignKey:id"` // BelongsTo "GeonamesCountry" with relation Many(GeonamesCity)-To-One(GeonamesCountry).
+	CountryID       int              `json:"country_id"`                                     // Value holder field for relation with "GeonamesCountry".
+	GeonamesZips    []*GeonamesZip   `gorm:"ForeignKey:city_id;AssociationForeignKey:id"`    // HasMany "GeonamesZip" with relation One(GeonamesCity)-Has-Many(GeonamesZip).
+	GeonamesState   *GeonamesState   `gorm:"ForeignKey:state_id;AssociationForeignKey:id"`   // BelongsTo "GeonamesState" with relation Many(GeonamesCity)-To-One(GeonamesState).
+	StateID         int              `json:"state_id"`                                       // Value holder field for relation with "GeonamesState".
 
 }
 

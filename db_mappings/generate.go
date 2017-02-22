@@ -28,13 +28,14 @@ type TemplateParams struct {
 
 var hasMany = make(map[string][]string)
 
-func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields map[string]*field, belongsToList []*belongsTo) *TemplateParams {
+func GenerateModel(modelDetails *modelDetails) *TemplateParams {
 
 	var needTimePackage bool
 
 	templateFields := []*TemplateField{}
 
-	for _, field := range fields {
+	for _, field := range modelDetails.normalFields {
+
 		fieldType := gormDataType(field)
 
 		if fieldType == "time.Time" || fieldType == "*time.Time" {
@@ -48,60 +49,69 @@ func GenerateModel(name string, table string, pkeys map[string]*fieldId, fields 
 			}
 		}
 
-		// won't work with Doctrine types
-		//if fieldType == "double precision" {
-		//	fieldType = "float32"
-		//}
-
 		templateFields = append(templateFields, &TemplateField{
 			Name:    gormColumnName(field.Name),
 			Type:    fieldType,
-			Tag:     genJSON(field.Name, field.Default, pkeys),
+			Tag:     genJSON(field.Name, field.Default, modelDetails.primaryKeys),
 			Comment: field.Comment,
 		})
-
-		/*isInfered, infColName := inferORM(field.Name, tables)
-
-		colName := gormColumnName(infColName)
-
-		// Add belongs_to relation
-		if isInfered {
-			templateFields = append(templateFields, &TemplateField{
-				Name:    colName,
-				Type:    "*" + colName,
-				Tag:     genJSON(strings.ToLower(infColName), "", nil),
-				Comment: "This line is infered from column name \"" + field.Name + "\".",
-			})
-
-			// Add has_many relation
-			hasMany[colName] = append(hasMany[colName], table)
-		}*/
 	}
 
-	for _, rel := range belongsToList {
-		templateFields = append(templateFields, &TemplateField{
-			Name:    rel.ModelName,
-			Type:    "*" + rel.ModelName,
-			Tag:     "gorm:\"ForeignKey:" + rel.ThisColumnName + ";AssociationForeignKey:" + rel.ReferencedColumnName + "\"",
-			Comment: "Belongs to \"" + rel.ModelName + "\" with relation " + rel.BelongsType + ".",
-		})
+	for _, rel := range modelDetails.relations {
 
-		// adding holder field if it was not added before (id columns with association)
-		if _, ok := fields[rel.ThisColumnName]; !ok {
+		relTypeDesc := strings.Replace(rel.TypeDescription, "{x}", modelDetails.getModelSimpleName(), 1)
+		relTypeDesc = strings.Replace(relTypeDesc, "{y}", rel.ModelName, 1)
+
+		switch rel.Type {
+		case "BelongsTo", "HasOne":
+
 			templateFields = append(templateFields, &TemplateField{
-				Name:    gormColumnName(rel.ThisColumnName),
-				Type:    gormDataType(&field{Type: rel.ReferencedColumnType}),
-				Tag:     genJSON(rel.ThisColumnName, "", nil),
-				Comment: "Value holder field for relation \"" + rel.ModelName + "\".",
+				Name:    rel.ModelName,
+				Type:    "*" + rel.ModelName,
+				Tag:     "gorm:\"ForeignKey:" + rel.ThisColumnName + ";AssociationForeignKey:" + rel.ReferencedColumnName + "\"",
+				Comment: rel.Type + " \"" + rel.ModelName + "\" with relation " + relTypeDesc + ".",
 			})
+
+			// adding holder field if it was not added before (id columns with association)
+			// FIXME need to extract logic to a reused func
+			if _, ok := modelDetails.normalFields[rel.ThisColumnName]; !ok {
+
+				templateFields = append(templateFields, &TemplateField{
+					Name:    gormColumnName(rel.ThisColumnName),
+					Type:    gormDataType(&field{Type: rel.ReferencedColumnType}),
+					Tag:     genJSON(rel.ThisColumnName, "", nil),
+					Comment: "Value holder field for relation with \"" + rel.ModelName + "\".",
+				})
+			}
+
+		case "HasMany":
+
+			templateFields = append(templateFields, &TemplateField{
+				Name:    inflector.Pluralize(rel.ModelName),
+				Type:    "[]*" + rel.ModelName,
+				Tag:     "gorm:\"ForeignKey:" + rel.ReferencedColumnName + ";AssociationForeignKey:" + rel.ThisColumnName + "\"",
+				Comment: rel.Type + " \"" + rel.ModelName + "\" with relation " + relTypeDesc + ".",
+			})
+
+			// adding holder field if it was not added before (id columns with association)
+			// FIXME need to extract logic to a reused func
+			if _, ok := modelDetails.normalFields[rel.ThisColumnName]; !ok {
+
+				templateFields = append(templateFields, &TemplateField{
+					Name:    gormColumnName(rel.ThisColumnName),
+					Type:    gormDataType(&field{Type: rel.ReferencedColumnType}),
+					Tag:     genJSON(rel.ThisColumnName, "", nil),
+					Comment: "Value holder field for relation with \"" + rel.ModelName + "\".",
+				})
+			}
 		}
 	}
 
 	params := &TemplateParams{
-		Name:            name,
+		Name:            modelDetails.getModelSimpleName(),
 		Fields:          templateFields,
 		NeedTimePackage: needTimePackage,
-		TableName:       table,
+		TableName:       modelDetails.getTableName(),
 	}
 
 	return params
@@ -120,7 +130,8 @@ func AddHasMany(params *TemplateParams) {
 	}
 }
 
-func SaveModel(table string, params *TemplateParams, outPath string) error {
+func SaveModel(modelName string, params *TemplateParams, outPath string) error {
+
 	body, err := Asset("db_mappings/_templates/model.go.tmpl")
 	if err != nil {
 		return err
@@ -142,7 +153,7 @@ func SaveModel(table string, params *TemplateParams, outPath string) error {
 		return err
 	}
 
-	modelFile := filepath.Join(outPath, inflector.Singularize(table)+".go")
+	modelFile := filepath.Join(outPath, snaker.CamelToSnake(modelName)+".go")
 
 	if err := ioutil.WriteFile(modelFile, src, 0644); err != nil {
 		return err
@@ -246,6 +257,7 @@ func gormColumnName(s string) string {
 }
 
 // See http://docs.doctrine-project.org/projects/doctrine-orm/en/latest/reference/basic-mapping.html#doctrine-mapping-types
+// FIXME maybe better to use general types instead of concrete types
 func gormDataType(f *field) string {
 	switch {
 

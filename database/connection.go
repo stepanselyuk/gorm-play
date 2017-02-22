@@ -16,7 +16,7 @@ func GetConnection() *gorm.DB {
 		return connection
 	}
 
-	connection, err := gorm.Open("mysql", "gorm-play:1234@tcp(gorm-db:3306)/gorm-play?charset=utf8&parseTime=True&loc=Local")
+	connection, err := gorm.Open("mysql", "gorm-play:1234@tcp(172.19.0.2:3306)/gorm-play?charset=utf8&parseTime=True&loc=Local")
 
 	if err != nil {
 		log.Fatal(err)
